@@ -1,0 +1,38 @@
+version: '3.9'
+
+services:
+  database:
+    image: postgres:15-alpine
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: food_payment
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "food"]
+      interval: 10s
+      retries: 5
+      timeout: 10s
+
+  app:
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      DB_HOST: database
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_BASE: food_payment
+
+volumes:
+  postgres_data:
+    driver: local
