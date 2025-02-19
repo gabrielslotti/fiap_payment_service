@@ -1,0 +1,91 @@
+name: Build and Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  sonarcloud:
+    name: Analisar Código com SonarCloud
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Instalar UV
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Executar testes com cobertura
+        run: uv run pytest --cov-report xml:coverage.xml --cov=app
+
+      - name: Verificar Arquivo de Cobertura
+        run: ls -l coverage.xml
+
+      - name: Instalar SonnarScanner
+        run: |
+          wget -q -O sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.2.1.4610-linux-x64.zip
+          unzip sonar-scanner.zip
+          echo "$(pwd)/sonar-scanner-6.2.1.4610-linux-x64/bin" >> $GITHUB_PATH
+          ./sonar-scanner-6.2.1.4610-linux-x64/bin/sonar-scanner -v
+
+      - name: Executar SonarScanner para SonarCloud
+        run: |
+          ./sonar-scanner-6.2.1.4610-linux-x64/bin/sonar-scanner \
+            -Dsonar.organization=${{ secrets.SONAR_ORG }} \
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_ORG: ${{ secrets.SONAR_ORG }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: sonarcloud
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Authenticate with Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_DEPLOY_SA }}
+
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Build and Push Docker image
+      run: |
+        IMAGE_URI="docker.io/${{ secrets.DOCKER_USERNAME }}/food-orders-service:latest"
+        echo "Logging in to Docker Hub"
+        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+        docker build -t "$IMAGE_URI" .
+        docker push "$IMAGE_URI"
+
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy food-payment-service  \
+          --image "docker.io/${{ secrets.DOCKER_USERNAME }}/food-orders-service:latest" \
+          --platform managed \
+          --region ${{ secrets.GCP_LOCATION }} \
+          --port 8000 \
+          --memory 512Mi \
+          --cpu 1 \
+          --max-instances 1 \
+          --project ${{ secrets.GCP_PROJECT_ID  }} \
+          --service-account ${{ secrets.GCP_PROJECT_SA_NAME }} \
+          --set-env-vars ENV=prod,DB_HOST=${{ secrets.DB_HOST }},DB_USER=${{ secrets.DB_USER}},DB_PASS=${{ secrets.DB_PASS}}
