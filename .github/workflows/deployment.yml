@@ -88,4 +88,4 @@ jobs:
           --max-instances 1 \
           --project ${{ secrets.GCP_PROJECT_ID  }} \
           --service-account ${{ secrets.GCP_PROJECT_SA_NAME }} \
-          --set-env-vars ENV=prod,DB_HOST=${{ secrets.DB_HOST }},DB_USER=${{ secrets.DB_USER}},DB_PASS=${{ secrets.DB_PASS}}
+          --set-env-vars ENV=prod,PORT=8001,DB_HOST=${{ secrets.DB_HOST }},DB_USER=${{ secrets.DB_USER}},DB_PASS=${{ secrets.DB_PASS}}
