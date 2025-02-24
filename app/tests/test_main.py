@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from app.database import Base, get_db
 from app.tests.db import engine, override_get_db
@@ -40,23 +41,25 @@ def test_payment(test_db):
 
     assert response.status_code == 200
     assert response.json() == {
-        "id": 1,
         "external_id": "10634272829",
         "status": "Pendente",
         "value": 32.5,
         "qrcode": "PIX+QRCODE"
     }
 
-    response = client.post(
-        "/callback",
-        json={"id": 1, "status": "Efetuado"}
-    )
+    with patch("httpx.post") as mock_post:
+        mock_post.return_value.status_code = 201
 
-    assert response.status_code == 200
-    assert response.json() == {
-        "id": 1,
-        "status": "Efetuado",
-    }
+        response = client.post(
+            "/callback",
+            json={"id": 1, "status": "Efetuado"}
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "id": 1,
+            "status": "Efetuado",
+        }
 
 
 def test_callback_non_existing_payment(test_db):

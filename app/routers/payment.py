@@ -1,3 +1,5 @@
+import httpx
+from functools import lru_cache
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from app.mercadopago import MercadoPago
@@ -5,8 +7,18 @@ from app.models.payment import Payment as PaymentModel
 from app.schemas.payment import (
     PaymentCheckout, PaymentCheckoutResponse, PaymentUpdate
 )
-from .. import database
+from .. import database, config
 
+
+@lru_cache()
+def get_settings():
+    """
+    Config settings function.
+    """
+    return config.Settings()
+
+
+conf_settings = get_settings()
 
 router = APIRouter()
 
@@ -74,5 +86,20 @@ def callback(
     db_session.add(db_payment)
     db_session.commit()
     db_session.refresh(db_payment)
+
+    # Callback Orders Service to create the order
+    if db_payment.status == "Efetuado":
+        req = httpx.post(
+            f"{conf_settings.order_service_url}/order/create",
+            json={
+                "external_id": db_payment.external_id
+            }
+        )
+
+        if req.status_code != 201:
+            raise HTTPException(
+                status_code=400,
+                detail="Error calling back order service"
+            )
 
     return PaymentUpdate(id=db_payment.id, status=db_payment.status)
