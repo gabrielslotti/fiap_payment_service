@@ -47,6 +47,8 @@ class Settings(BaseSettings):
             path=f"/{self.db_base}",
         )
 
+    order_service_url: str = "http://0.0.0.0:8000"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -26,5 +26,8 @@ class Payment(BaseModel):
     value: float
 
 
-class PaymentCheckoutResponse(Payment):
+class PaymentCheckoutResponse(BaseModel):
     qrcode: str
+    external_id: str
+    status: StatusEnum
+    value: float
